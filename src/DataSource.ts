@@ -30,7 +30,10 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
     const intervalMs = (options.intervalMs || 1000);
 
     const data = await mapLimit(options.targets, 5, async (target: MyQuery, callback: AsyncResultCallback<MutableDataFrame>) => {
+      // The base URL
       const url = this.url + "/api/" + target.entity + "?fromStartTime=" + new Date(from).toISOString() + "&toStartTime=" + new Date(to).toISOString();
+
+      // Get all the items that fit out timeframe
       const items = (await this.getItems(url, 0, from))
         .filter((i: any) => {
           /*
@@ -41,39 +44,48 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
         })
         .sort(this.itemComparer)
 
+      // The frame holds the timeseries data
       const frame = new MutableDataFrame({
         refId: target.refId,
         fields: [
           {name: 'time', type: FieldType.time},
-          {name: 'value', type: FieldType.number},
+          {name: 'count', type: FieldType.number},
         ],
       });
 
-      // Find out how many items fit in each interval
-      let lastIndex = 0;
-      for (let x = from; x <= to; x += intervalMs) {
-        let count = 0;
-        // Starting from the last item we "consumed", count how many items fall into the next bucket
-        while (lastIndex < items.length && items.slice(lastIndex)[0].ParsedEpoch < x + intervalMs) {
-          // Each item that falls into the bucket is "consumed" by incrementing the index that we start looking at
-          ++lastIndex;
-          // This item falls into this bucket, so increase the count
-          ++count;
-        }
+      // Put the items into the frame
+      this.processBucket(from, to, intervalMs, items, frame);
 
-        // Populate the time series data
-        if (count != 0) {
-          frame.add({
-            time: x,
-            value: count
-          });
-        }
-      }
-
+      // return the results
       callback(null, frame);
     });
 
     return {data};
+  }
+
+  processBucket(from: number, to: number, interval: number, items: any[], frame: MutableDataFrame) {
+    const count = this.getBucketItems(items, 0, from + interval);
+
+    // Populate the time series data
+    if (count != 0) {
+      frame.add({
+        time: from,
+        count: count
+      });
+    }
+
+    const nextFrom = from + interval;
+    if (nextFrom <= to) {
+      this.processBucket(nextFrom, to, interval, items.slice(count), frame);
+    }
+  }
+
+  getBucketItems(items: any[], count: number, bucketEnd: number): number {
+    if (count < items.length && items.slice(count)[0].ParsedEpoch < bucketEnd) {
+      return this.getBucketItems(items, count + 1, bucketEnd);
+    }
+
+    return count;
   }
 
   async getItems(url: string, skip: number, from: number): Promise<any[]> {
@@ -104,7 +116,7 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
   }
 
   itemComparer(a: any, b: any) {
-    return a.ParsedEpoch < b.ParsedEpoch ? 0 : 1;
+    return a.ParsedEpoch <= b.ParsedEpoch ? 0 : 1;
   }
 
   async testDatasource() {
