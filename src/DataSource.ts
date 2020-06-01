@@ -75,11 +75,14 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
               // This item falls into this bucket, so increase the count
               ++count;
             }
+
             // Populate the time series data
-            frame.add({
-              time: x,
-              value: count
-            });
+            if (count != 0) {
+              frame.add({
+                time: x,
+                value: count
+              });
+            }
           }
         })
         .catch((error) => {
