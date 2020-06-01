@@ -30,8 +30,20 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
     const intervalMs = (options.intervalMs || 1000);
 
     const data = await mapLimit(options.targets, 5, async (target: MyQuery, callback: AsyncResultCallback<MutableDataFrame>) => {
+
+      const environmentIds = await this.convertNamesToIds(target.environment, "environments");
+      const projectIds = await this.convertNamesToIds(target.project, "projects");
+      const channelIds = await this.convertNamesToIds(target.channel, "channels");
+      const tenantIds = await this.convertNamesToIds(target.tenant, "tenants");
+
       // The base URL
-      const url = this.url + "/api/" + target.entity + "?fromStartTime=" + new Date(from).toISOString() + "&toStartTime=" + new Date(to).toISOString();
+      const url = this.url + "/api/" + target.entity +
+        "?fromStartTime=" + new Date(from).toISOString() +
+        "&toStartTime=" + new Date(to).toISOString() +
+        (projectIds ? "&projectIds=" + projectIds : "") +
+        (environmentIds ? "&environments=" + environmentIds : "") +
+        (channelIds ? "&channels=" + channelIds : "") +
+        (tenantIds ? "&tenants=" + tenantIds : "");
 
       // Get all the items that fit out timeframe
       const items = (await this.getItems(url, 0, from))
@@ -61,6 +73,35 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
     });
 
     return {data};
+  }
+
+  /**
+   * Takes a list of names and returns a list of ids
+   * @param input The comma separated list of names
+   * @param entity The type of entity we are matching
+   * @return A comma separated list of ids, ignoring any names that didn't match
+   */
+  async convertNamesToIds(input: string, entity: string) {
+    return !input
+      ? null
+      : (await mapLimit(input.split(","), 5, async (element: string, callback: AsyncResultCallback<string | null>) => {
+          const environmentName = this.url + "/api/" + entity + "?partialName=" + encodeURI(element);
+          return (await fetch(environmentName, {headers: {'X-Octopus-ApiKey': this.apiKey}})
+            .then(response => response.json())
+            .then((data: any) => {
+              if (data && data.Items) {
+                callback(null, data.Items
+                  .filter((i: any) => i.Name == element)
+                  .map((i: any) => i.Id)
+                  .pop() || null);
+              } else {
+                callback(null, null);
+              }
+            })
+          )}
+        ))
+        .filter(i => i)
+        .join(",");
   }
 
   processBucket(from: number, to: number, interval: number, items: any[], frame: MutableDataFrame) {

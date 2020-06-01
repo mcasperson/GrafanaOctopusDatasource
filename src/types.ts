@@ -2,6 +2,11 @@ import { DataQuery, DataSourceJsonData } from '@grafana/data';
 
 export interface MyQuery extends DataQuery {
   entity: string;
+  environment: string;
+  tenant: string;
+  channel: string;
+  project: string;
+  space: string;
 }
 
 export const defaultQuery: Partial<MyQuery> = {
