@@ -1,0 +1,39 @@
+{
+  "type": "datasource",
+  "name": "octopus-datasource",
+  "id": "octopus-deploy-octopus-datasource",
+  "metrics": true,
+  "info": {
+    "description": "Datasource for querying Octopus related events",
+    "author": {
+      "name": "Matthew Casperson",
+      "url": "https://octopus.com"
+    },
+    "keywords": [
+      "Octopus",
+      "CI",
+      "CD"
+    ],
+    "logos": {
+      "small": "img/logo.svg",
+      "large": "img/logo.svg"
+    },
+    "links": [
+      {
+        "name": "Website",
+        "url": "https://github.com/grafana/simple-datasource"
+      },
+      {
+        "name": "License",
+        "url": "https://github.com/grafana/simple-datasource/blob/master/LICENSE"
+      }
+    ],
+    "screenshots": [],
+    "version": "%VERSION%",
+    "updated": "%TODAY%"
+  },
+  "dependencies": {
+    "grafanaVersion": "6.5.x",
+    "plugins": []
+  }
+}
