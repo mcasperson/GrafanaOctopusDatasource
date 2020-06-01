@@ -53,12 +53,27 @@ export class QueryEditor extends PureComponent<Props> {
     onRunQuery();
   };
 
+  onNameChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const {onChange, query, onRunQuery} = this.props;
+    onChange({...query, name: event.target.value});
+    // executes the query
+    onRunQuery();
+  };
+
   render() {
     const query = defaults(this.props.query, defaultQuery);
-    const {entity, project, environment, space, tenant, channel} = query;
+    const {name, entity, project, environment, space, tenant, channel} = query;
 
     return (
       <div className="gf-form-group">
+        <div className="gf-form">
+          <FormField
+            labelWidth={8}
+            value={name}
+            onChange={this.onNameChange}
+            label="Series Name"
+          />
+        </div>
         <div className="gf-form">
           <FormField
             labelWidth={8}

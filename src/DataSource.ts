@@ -61,6 +61,7 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
 
         // The frame holds the timeseries data
         const frame = new MutableDataFrame({
+          name: target.name,
           refId: target.refId,
           fields: [
             {name: 'time', type: FieldType.time},

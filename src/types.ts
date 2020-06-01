@@ -1,6 +1,7 @@
 import { DataQuery, DataSourceJsonData } from '@grafana/data';
 
 export interface MyQuery extends DataQuery {
+  name: string;
   entity: string;
   environment: string;
   tenant: string;
