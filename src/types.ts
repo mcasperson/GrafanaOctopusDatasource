@@ -8,6 +8,7 @@ export interface MyQuery extends DataQuery {
   channel: string;
   project: string;
   space: string;
+  state: string;
 }
 
 export const defaultQuery: Partial<MyQuery> = {

@@ -2,13 +2,23 @@ import defaults from 'lodash/defaults';
 
 import React, {ChangeEvent, PureComponent} from 'react';
 import {LegacyForms} from '@grafana/ui';
-import {QueryEditorProps} from '@grafana/data';
+import {QueryEditorProps, SelectableValue} from '@grafana/data';
 import {DataSource} from './DataSource';
 import {defaultQuery, MyDataSourceOptions, MyQuery} from './types';
 
-const {FormField} = LegacyForms;
+const {FormField, Select} = LegacyForms;
 
 type Props = QueryEditorProps<DataSource, MyQuery, MyDataSourceOptions>;
+
+const StateOptions = [
+  {value: "Queued", label: "Queued"},
+  {value: "Executing", label: "Executing"},
+  {value: "Failed", label: "Failed"},
+  {value: "Canceled", label: "Canceled"},
+  {value: "TimedOut", label: "TimedOut"},
+  {value: "Success", label: "Success"},
+  {value: "Cancelling", label: "Cancelling"},
+];
 
 export class QueryEditor extends PureComponent<Props> {
   onEntityChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -60,9 +70,16 @@ export class QueryEditor extends PureComponent<Props> {
     onRunQuery();
   };
 
+  onStateChange = (event: SelectableValue<string>) => {
+    const {onChange, query, onRunQuery} = this.props;
+    onChange({...query, state: event.value || ""});
+    // executes the query
+    onRunQuery();
+  };
+
   render() {
     const query = defaults(this.props.query, defaultQuery);
-    const {name, entity, project, environment, space, tenant, channel} = query;
+    const {name, entity, project, environment, space, tenant, channel, state} = query;
 
     return (
       <div className="gf-form-group">
@@ -120,6 +137,14 @@ export class QueryEditor extends PureComponent<Props> {
             value={space}
             onChange={this.onSpaceChange}
             label="Space"
+          />
+        </div>
+        <div className="gf-form">
+          <Select
+            formatCreateLabel={i => "test"}
+            value={StateOptions.filter(s => s.value == state).pop()}
+            options={StateOptions}
+            onChange={this.onStateChange}
           />
         </div>
       </div>
