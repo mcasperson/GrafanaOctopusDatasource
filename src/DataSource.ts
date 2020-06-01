@@ -67,12 +67,15 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
           let lastIndex = 0;
           for (let x = from; x <= to; x += intervalMs) {
             let count = 0;
+            // Starting from the last item we "consumed", count how many items fall into the next bucket
             while (lastIndex < filteredItems.length && filteredItems.slice(lastIndex)[0].ParsedEpoch < x + intervalMs)
             {
+              // Each item that falls into the bucket is "consumed" by incrementing the index that we start looking at
               ++lastIndex;
+              // This item falls into this bucket, so increase the count
               ++count;
             }
-
+            // Populate the time series data
             frame.add({
               time: x,
               value: count
