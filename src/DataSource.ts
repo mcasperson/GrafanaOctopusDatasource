@@ -184,7 +184,7 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
   }
 
   processBucket(from: number, to: number, interval: number, items: any[], frame: MutableDataFrame) {
-    const results = this.getBucketItems(items, 0, 0, from + interval);
+    const results = this.getBucketItems(items, 0, null, from + interval);
 
     // Populate the time series data.
     // Note that we do populate all values, even when the count is 0:
@@ -202,7 +202,7 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
 
   getBucketItems(items: any[], count: number, value: number | null, bucketEnd: number): { count: number, value: number | null } {
     // If there is no date, or if the date is before the end of the bucket, add count the item
-    if (count < items.length && (!items.slice(count)[0].ParsedEpoch || items.slice(count)[0].ParsedEpoch < bucketEnd)) {
+    if (count < items.length && (_.isNil(items.slice(count)[0].ParsedEpoch) || items.slice(count)[0].ParsedEpoch < bucketEnd)) {
       return this.getBucketItems(
         items,
         count + 1,
@@ -265,7 +265,19 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
   }
 
   itemComparer(a: any, b: any) {
-    return a.ParsedEpoch <= b.ParsedEpoch ? 0 : 1;
+    if (_.isNil(a.ParsedEpoch) && _.isNil(b.ParsedEpoch)) {
+      return 0;
+    }
+
+    if (!_.isNil(a.ParsedEpoch) && !_.isNil(b.ParsedEpoch)) {
+      return a.ParsedEpoch <= b.ParsedEpoch ? 0 : 1;
+    }
+
+    if (_.isNil(a.ParsedEpoch)) {
+      return 1;
+    }
+
+    return 0;
   }
 
   async testDatasource() {
