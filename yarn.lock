@@ -6955,6 +6955,11 @@ jest@24.8.0:
     import-local "^2.0.0"
     jest-cli "^24.8.0"
 
+jq-web@^0.5.1:
+  version "0.5.1"
+  resolved "https://registry.yarnpkg.com/jq-web/-/jq-web-0.5.1.tgz#4456cd3be4c2688c43f287b1fec2e3ea29e427e3"
+  integrity sha512-3Fa3E6g3U1O1j46ljy0EM10yRr4txzILga8J7bqOG8F89gZ6Lilz82WG9z6TItWpYEO0YGa4W8yFGj+NMM1xqQ==
+
 jquery@3.4.1:
   version "3.4.1"
   resolved "https://registry.yarnpkg.com/jquery/-/jquery-3.4.1.tgz#714f1f8d9dde4bdfa55764ba37ef214630d80ef2"

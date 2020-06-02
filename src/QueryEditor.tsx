@@ -78,9 +78,16 @@ export class QueryEditor extends PureComponent<Props> {
     onRunQuery();
   };
 
+  onJqChange = (event: SelectableValue<string>) => {
+    const {onChange, query, onRunQuery} = this.props;
+    onChange({...query, jq: event.target.value});
+    // executes the query
+    onRunQuery();
+  };
+
   render() {
     const query = defaults(this.props.query, defaultQuery);
-    const {name, entity, project, environment, space, tenant, channel, state} = query;
+    const {name, entity, project, environment, space, tenant, channel, state, jq} = query;
 
     return (
       <div className="gf-form-group">
@@ -148,6 +155,14 @@ export class QueryEditor extends PureComponent<Props> {
             options={StateOptions}
             onChange={this.onStateChange}
             isMulti={false}
+          />
+        </div>
+        <div className="gf-form">
+          <FormField
+            labelWidth={8}
+            value={jq}
+            onChange={this.onJqChange}
+            label="jq query"
           />
         </div>
       </div>

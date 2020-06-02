@@ -1,5 +1,7 @@
 import {AsyncResultCallback, mapLimit} from "async";
 
+const jq = require('jq-web')
+
 import {
   DataQueryRequest,
   DataQueryResponse,
@@ -9,7 +11,8 @@ import {
   FieldType,
 } from '@grafana/data';
 
-import { MyQuery, MyDataSourceOptions } from './types';
+import {MyQuery, MyDataSourceOptions} from './types';
+import _ from "lodash";
 
 const TAKE = 30;
 
@@ -67,18 +70,34 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
           })
           .sort(this.itemComparer)
 
+        const enrichedItems = await mapLimit(items, 5, async (item: any, callback: AsyncResultCallback<MutableDataFrame | null>) => {
+          item.TaskDetails = await this.getTaskDetails(item.TaskId, spaceId)
+          callback(null, item);
+        });
+
+        console.log(JSON.stringify(enrichedItems));
+
         // The frame holds the timeseries data
         const frame = new MutableDataFrame({
           name: target.name,
           refId: target.refId,
           fields: [
             {name: 'time', type: FieldType.time},
-            {name: 'count', type: FieldType.number},
+            {name: 'value', type: FieldType.number}
           ],
         });
 
+        /*
+          This is the magic that allows us to have a queriable dataset without direct access to the database
+          or using a real timeseries database. By optionally processing the items returned by the Octopus
+          REST API with jq, we can manipulate the data however we want.
+         */
+        const processedJson = target.jq
+          ? jq.json(enrichedItems, target.jq)
+          : enrichedItems;
+
         // Put the items into the frame
-        this.processBucket(from, to, intervalMs, items, frame);
+        this.processBucket(from, to, intervalMs, processedJson, frame);
 
         // return the results
         callback(null, frame);
@@ -115,8 +134,8 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
                 callback(null, null);
               }
             })
-          }
-        ))
+        }
+      ))
         .filter(i => i)
         .join(",");
   }
@@ -149,35 +168,73 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
                 callback(null, null);
               }
             })
-          }
-        ))
+        }
+      ))
         .filter(i => i)
         .join(",");
   }
 
+  async getTaskDetails(taskId: string, space?: string | null) {
+    const url = this.url + "/api/" +
+      (space ? space + "/" : "") +
+      "tasks/" + taskId;
+
+    return await fetch(url, {headers: {'X-Octopus-ApiKey': this.apiKey}})
+      .then(response => response.json());
+  }
+
   processBucket(from: number, to: number, interval: number, items: any[], frame: MutableDataFrame) {
-    const count = this.getBucketItems(items, 0, from + interval);
+    const results = this.getBucketItems(items, 0, 0, from + interval);
 
     // Populate the time series data.
     // Note that we do populate all values, even when the count is 0:
     // https://github.com/grafana/grafana/issues/14130
-      frame.add({
-        time: from,
-        count: count
-      });
+    frame.add({
+      time: from,
+      value: !_.isNil(results.value) ? results.value : results.count
+    });
 
     const nextFrom = from + interval;
-    if (nextFrom <= to) {
-      this.processBucket(nextFrom, to, interval, items.slice(count), frame);
+    if (nextFrom <= to && items.length > results.count) {
+      this.processBucket(nextFrom, to, interval, items.slice(results.count), frame);
     }
   }
 
-  getBucketItems(items: any[], count: number, bucketEnd: number): number {
-    if (count < items.length && items.slice(count)[0].ParsedEpoch < bucketEnd) {
-      return this.getBucketItems(items, count + 1, bucketEnd);
+  getBucketItems(items: any[], count: number, value: number | null, bucketEnd: number): { count: number, value: number | null } {
+    // If there is no date, or if the date is before the end of the bucket, add count the item
+    if (count < items.length && (!items.slice(count)[0].ParsedEpoch || items.slice(count)[0].ParsedEpoch < bucketEnd)) {
+      return this.getBucketItems(
+        items,
+        count + 1,
+        this.getValue(value, items.slice(count)[0].calculatedValue),
+        bucketEnd);
     }
 
-    return count;
+    return {count, value};
+  }
+
+  /**
+   * When building up the values, we have to santise the input to account for the fact that the
+   * value property may not be set to a number.
+   * @param valuea The first value
+   * @param valueb The second value
+   * @return The sum of the numbers if they are both numbers, null if neither are numbers, or the value of the only
+   * valid number passed in.
+   */
+  getValue(valuea: any, valueb: any): number | null {
+    if (!_.isNumber(valuea) && !_.isNumber(valueb)) {
+      return null;
+    }
+
+    if (_.isNumber(valuea) && _.isNumber(valueb)) {
+      return valuea + valueb;
+    }
+
+    if (_.isNumber(valuea)) {
+      return valuea;
+    }
+
+    return valueb;
   }
 
   async getItems(url: string, skip: number, from: number): Promise<any[]> {

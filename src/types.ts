@@ -9,6 +9,7 @@ export interface MyQuery extends DataQuery {
   project: string;
   space: string;
   state: string;
+  jq: string;
 }
 
 export const defaultQuery: Partial<MyQuery> = {
