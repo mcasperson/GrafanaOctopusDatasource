@@ -37,8 +37,10 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
         const spaceId = await this.convertNamesToIds(target.space, "spaces");
         const environmentIds = await this.convertNamesToIds(target.environment, "environments", spaceId);
         const projectIds = await this.convertNamesToIds(target.project, "projects", spaceId);
-        const channelIds = await this.convertNamesToIds(target.channel, "channels", spaceId);
         const tenantIds = await this.convertNamesToIds(target.tenant, "tenants", spaceId);
+        const channelIds = projectIds ?
+          await this.convertProjectChildNamesToIds(target.channel, projectIds.split(",")[0], "channels", spaceId)
+          : null;
 
 
         // The base URL
@@ -90,6 +92,7 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
    * Takes a list of names and returns a list of ids
    * @param input The comma separated list of names
    * @param entity The type of entity we are matching
+   * @param space The optional space id
    * @return A comma separated list of ids, ignoring any names that didn't match
    */
   async convertNamesToIds(input: string, entity: string, space?: string | null) {
@@ -118,16 +121,50 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
         .join(",");
   }
 
+  /**
+   * Takes a list of names for project specific entities and returns a list of ids
+   * @param input The comma separated list of names
+   * @param projectId The project Id that contains the entity
+   * @param entity The type of entity we are matching
+   * @param space The optional space id
+   * @return A comma separated list of ids, ignoring any names that didn't match
+   */
+  async convertProjectChildNamesToIds(input: string, projectId: string, entity: string, space?: string | null) {
+    return !input
+      ? null
+      : (await mapLimit(input.split(","), 5, async (element: string, callback: AsyncResultCallback<string | null>) => {
+          const url = this.url + "/api/" +
+            (space ? space + "/" : "") +
+            "projects/" + projectId + "/" +
+            entity;
+          await fetch(url, {headers: {'X-Octopus-ApiKey': this.apiKey}})
+            .then(response => response.json())
+            .then((data: any) => {
+              if (data && data.Items) {
+                callback(null, data.Items
+                  .filter((i: any) => i.Name == element)
+                  .map((i: any) => i.Id)
+                  .pop() || null);
+              } else {
+                callback(null, null);
+              }
+            })
+          }
+        ))
+        .filter(i => i)
+        .join(",");
+  }
+
   processBucket(from: number, to: number, interval: number, items: any[], frame: MutableDataFrame) {
     const count = this.getBucketItems(items, 0, from + interval);
 
-    // Populate the time series data
-    if (count != 0) {
+    // Populate the time series data.
+    // Note that we do populate all values, even when the count is 0:
+    // https://github.com/grafana/grafana/issues/14130
       frame.add({
         time: from,
         count: count
       });
-    }
 
     const nextFrom = from + interval;
     if (nextFrom <= to) {
