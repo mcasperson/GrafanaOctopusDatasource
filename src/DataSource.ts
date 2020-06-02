@@ -1,5 +1,5 @@
 import {AsyncResultCallback, mapLimit} from "async";
-
+import { SystemJS } from '@grafana/runtime'
 const jq = require('jq-web')
 
 import {
@@ -92,15 +92,20 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
           or using a real timeseries database. By optionally processing the items returned by the Octopus
           REST API with jq, we can manipulate the data however we want.
          */
-        const processedJson = target.jq
-          ? jq.json(enrichedItems, target.jq)
-          : enrichedItems;
+        try {
+          const processedJson = target.jq
+            ? jq.json(enrichedItems, target.jq)
+            : enrichedItems;
 
-        // Put the items into the frame
-        this.processBucket(from, to, intervalMs, processedJson, frame);
+          // Put the items into the frame
+          this.processBucket(from, to, intervalMs, processedJson, frame);
 
-        // return the results
-        callback(null, frame);
+          // return the results
+          callback(null, frame);
+        } catch (e) {
+          SystemJS.load('app/core/app_events').then((appEvents:any) => { appEvents.emit('alert-error', e) })
+          callback(e);
+        }
       }
     })).filter((i: any) => i);
 
