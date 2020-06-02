@@ -34,19 +34,25 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
         // if this query is hidden, don't get any data
         callback(null, null);
       } else {
-        const environmentIds = await this.convertNamesToIds(target.environment, "environments");
-        const projectIds = await this.convertNamesToIds(target.project, "projects");
-        const channelIds = await this.convertNamesToIds(target.channel, "channels");
-        const tenantIds = await this.convertNamesToIds(target.tenant, "tenants");
+        const spaceId = await this.convertNamesToIds(target.space, "spaces");
+        const environmentIds = await this.convertNamesToIds(target.environment, "environments", spaceId);
+        const projectIds = await this.convertNamesToIds(target.project, "projects", spaceId);
+        const channelIds = await this.convertNamesToIds(target.channel, "channels", spaceId);
+        const tenantIds = await this.convertNamesToIds(target.tenant, "tenants", spaceId);
+
 
         // The base URL
-        const url = this.url + "/api/" + target.entity +
+        const url = this.url +
+          "/api/" +
+          (spaceId ? spaceId + "/" : "") +
+          target.entity +
           "?fromStartTime=" + new Date(from).toISOString() +
           "&toStartTime=" + new Date(to).toISOString() +
           (projectIds ? "&projects=" + projectIds : "") +
           (environmentIds ? "&environments=" + environmentIds : "") +
           (channelIds ? "&channels=" + channelIds : "") +
-          (tenantIds ? "&tenants=" + tenantIds : "");
+          (tenantIds ? "&tenants=" + tenantIds : "") +
+          (target.state ? "&taskState=" + target.state : "");
 
         // Get all the items that fit out timeframe
         const items = (await this.getItems(url, 0, from))
@@ -86,11 +92,14 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
    * @param entity The type of entity we are matching
    * @return A comma separated list of ids, ignoring any names that didn't match
    */
-  async convertNamesToIds(input: string, entity: string) {
+  async convertNamesToIds(input: string, entity: string, space?: string | null) {
     return !input
       ? null
       : (await mapLimit(input.split(","), 5, async (element: string, callback: AsyncResultCallback<string | null>) => {
-          const url = this.url + "/api/" + entity + "?partialName=" + encodeURI(element);
+          const url = this.url + "/api/" +
+            (space ? space + "/" : "") +
+            entity +
+            "?partialName=" + encodeURI(element);
           await fetch(url, {headers: {'X-Octopus-ApiKey': this.apiKey}})
             .then(response => response.json())
             .then((data: any) => {

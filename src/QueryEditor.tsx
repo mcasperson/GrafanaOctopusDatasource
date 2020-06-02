@@ -11,6 +11,7 @@ const {FormField, Select} = LegacyForms;
 type Props = QueryEditorProps<DataSource, MyQuery, MyDataSourceOptions>;
 
 const StateOptions = [
+  {value: "", label: "All"},
   {value: "Queued", label: "Queued"},
   {value: "Executing", label: "Executing"},
   {value: "Failed", label: "Failed"},
@@ -140,11 +141,13 @@ export class QueryEditor extends PureComponent<Props> {
           />
         </div>
         <div className="gf-form">
+          <div className="gf-form-label width-8">Deployment State</div>
           <Select
-            formatCreateLabel={i => "test"}
+            defaultValue={StateOptions.filter(s => s.value == "").pop()}
             value={StateOptions.filter(s => s.value == state).pop()}
             options={StateOptions}
             onChange={this.onStateChange}
+            isMulti={false}
           />
         </div>
       </div>
