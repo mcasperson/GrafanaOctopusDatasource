@@ -103,7 +103,8 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
           // return the results
           callback(null, frame);
         } catch (e) {
-          SystemJS.load('app/core/app_events').then((appEvents:any) => { appEvents.emit('alert-error', e) })
+          SystemJS.load('app/core/app_events').then((appEvents:any) =>
+            appEvents.emit('alert-error', 'An exception was thrown while processing the jq query: ' + e.toString()))
           callback(e);
         }
       }
