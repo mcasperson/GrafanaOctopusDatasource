@@ -214,8 +214,8 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
   }
 
   /**
-   * When building up the values, we have to santise the input to account for the fact that the
-   * value property may not be set to a number.
+   * When building up the values, we have to sanitise the input to account for the fact that the
+   * calculatedValue property may not be set to a number.
    * @param valuea The first value
    * @param valueb The second value
    * @return The sum of the numbers if they are both numbers, null if neither are numbers, or the value of the only
