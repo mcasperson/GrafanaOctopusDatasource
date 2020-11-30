@@ -1,6 +1,6 @@
-import {AsyncResultCallback, mapLimit} from "async";
-import { SystemJS } from '@grafana/runtime'
-const jq = require('jq-web')
+import { AsyncResultCallback, mapLimit } from 'async';
+import { SystemJS } from '@grafana/runtime';
+const jq = require('jq-web');
 
 import {
   DataQueryRequest,
@@ -11,8 +11,8 @@ import {
   FieldType,
 } from '@grafana/data';
 
-import {MyQuery, MyDataSourceOptions} from './types';
-import _ from "lodash";
+import { MyQuery, MyDataSourceOptions } from './types';
+import _ from 'lodash';
 
 const TAKE = 30;
 
@@ -22,95 +22,106 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
 
   constructor(instanceSettings: DataSourceInstanceSettings<MyDataSourceOptions>) {
     super(instanceSettings);
-    this.url = instanceSettings.jsonData.url || "";
-    this.apiKey = instanceSettings.jsonData.apiKey || "";
+    this.url = instanceSettings.jsonData.url || '';
+    this.apiKey = instanceSettings.jsonData.apiKey || '';
   }
 
   async query(options: DataQueryRequest<MyQuery>): Promise<DataQueryResponse> {
-    const {range} = options;
+    const { range } = options;
     const from = range!.from.valueOf();
     const to = range!.to.valueOf();
-    const intervalMs = (options.intervalMs || 1000);
+    const intervalMs = options.intervalMs || 1000;
 
-    const data = (await mapLimit(options.targets, 5, async (target: MyQuery, callback: AsyncResultCallback<MutableDataFrame | null>) => {
-      if (target.hide) {
-        // if this query is hidden, don't get any data
-        callback(null, null);
-      } else {
-        const spaceId = await this.convertNamesToIds(target.space, "spaces");
-        const environmentIds = await this.convertNamesToIds(target.environment, "environments", spaceId);
-        const projectIds = await this.convertNamesToIds(target.project, "projects", spaceId);
-        const tenantIds = await this.convertNamesToIds(target.tenant, "tenants", spaceId);
-        const channelIds = projectIds ?
-          await this.convertProjectChildNamesToIds(target.channel, projectIds.split(",")[0], "channels", spaceId)
-          : null;
+    const data = (
+      await mapLimit(
+        options.targets,
+        5,
+        async (target: MyQuery, callback: AsyncResultCallback<MutableDataFrame | null>) => {
+          if (target.hide) {
+            // if this query is hidden, don't get any data
+            callback(null, null);
+          } else {
+            const spaceId = await this.convertNamesToIds(target.space, 'spaces');
+            const environmentIds = await this.convertNamesToIds(target.environment, 'environments', spaceId);
+            const projectIds = await this.convertNamesToIds(target.project, 'projects', spaceId);
+            const tenantIds = await this.convertNamesToIds(target.tenant, 'tenants', spaceId);
+            const channelIds = projectIds
+              ? await this.convertProjectChildNamesToIds(target.channel, projectIds.split(',')[0], 'channels', spaceId)
+              : null;
 
+            // The base URL
+            const url =
+              this.url +
+              '/api/' +
+              (spaceId ? spaceId + '/' : '') +
+              target.entity +
+              '?fromStartTime=' +
+              new Date(from).toISOString() +
+              '&toStartTime=' +
+              new Date(to).toISOString() +
+              (projectIds ? '&projects=' + projectIds : '') +
+              (environmentIds ? '&environments=' + environmentIds : '') +
+              (channelIds ? '&channels=' + channelIds : '') +
+              (tenantIds ? '&tenants=' + tenantIds : '') +
+              (target.state ? '&taskState=' + target.state : '');
 
-        // The base URL
-        const url = this.url +
-          "/api/" +
-          (spaceId ? spaceId + "/" : "") +
-          target.entity +
-          "?fromStartTime=" + new Date(from).toISOString() +
-          "&toStartTime=" + new Date(to).toISOString() +
-          (projectIds ? "&projects=" + projectIds : "") +
-          (environmentIds ? "&environments=" + environmentIds : "") +
-          (channelIds ? "&channels=" + channelIds : "") +
-          (tenantIds ? "&tenants=" + tenantIds : "") +
-          (target.state ? "&taskState=" + target.state : "");
-
-        // Get all the items that fit out timeframe
-        const items = (await this.getItems(url, 0, from))
-          .filter((i: any) => {
-            /*
+            // Get all the items that fit out timeframe
+            const items = (await this.getItems(url, 0, from))
+              .filter((i: any) => {
+                /*
               The REST API request should only return values in the correct range, but if not records outside of the
               requested range will result in an error in the frontend, so double check here just to be sure.
              */
-            return i.ParsedEpoch >= from && i.ParsedEpoch <= to;
-          })
-          .sort(this.itemComparer)
+                return i.ParsedEpoch >= from && i.ParsedEpoch <= to;
+              })
+              .sort(this.itemComparer);
 
-        const enrichedItems = await mapLimit(items, 5, async (item: any, callback: AsyncResultCallback<MutableDataFrame | null>) => {
-          item.TaskDetails = await this.getTaskDetails(item.TaskId, spaceId)
-          callback(null, item);
-        });
+            const enrichedItems = await mapLimit(
+              items,
+              5,
+              async (item: any, callback: AsyncResultCallback<MutableDataFrame | null>) => {
+                item.TaskDetails = await this.getTaskDetails(item.TaskId, spaceId);
+                callback(null, item);
+              }
+            );
 
-        console.log(JSON.stringify(enrichedItems));
+            console.log(JSON.stringify(enrichedItems));
 
-        // The frame holds the timeseries data
-        const frame = new MutableDataFrame({
-          name: target.name,
-          refId: target.refId,
-          fields: [
-            {name: 'time', type: FieldType.time},
-            {name: 'value', type: FieldType.number}
-          ],
-        });
+            // The frame holds the timeseries data
+            const frame = new MutableDataFrame({
+              name: target.name,
+              refId: target.refId,
+              fields: [
+                { name: 'time', type: FieldType.time },
+                { name: 'value', type: FieldType.number },
+              ],
+            });
 
-        /*
+            /*
           This is the magic that allows us to have a queriable dataset without direct access to the database
           or using a real timeseries database. By optionally processing the items returned by the Octopus
           REST API with jq, we can manipulate the data however we want.
          */
-        try {
-          const processedJson = target.jq
-            ? jq.json(enrichedItems, target.jq)
-            : enrichedItems;
+            try {
+              const processedJson = target.jq ? jq.json(enrichedItems, target.jq) : enrichedItems;
 
-          // Put the items into the frame
-          this.processBucket(from, to, intervalMs, processedJson, frame);
+              // Put the items into the frame
+              this.processBucket(from, to, intervalMs, processedJson, frame);
 
-          // return the results
-          callback(null, frame);
-        } catch (e) {
-          SystemJS.load('app/core/app_events').then((appEvents:any) =>
-            appEvents.emit('alert-error', 'An exception was thrown while processing the jq query: ' + e.toString()))
-          callback(e);
+              // return the results
+              callback(null, frame);
+            } catch (e) {
+              SystemJS.load('app/core/app_events').then((appEvents: any) =>
+                appEvents.emit('alert-error', 'An exception was thrown while processing the jq query: ' + e.toString())
+              );
+              callback(e);
+            }
+          }
         }
-      }
-    })).filter((i: any) => i);
+      )
+    ).filter((i: any) => i);
 
-    return {data};
+    return { data };
   }
 
   /**
@@ -123,27 +134,27 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
   async convertNamesToIds(input: string, entity: string, space?: string | null) {
     return !input
       ? null
-      : (await mapLimit(input.split(","), 5, async (element: string, callback: AsyncResultCallback<string | null>) => {
-          const url = this.url + "/api/" +
-            (space ? space + "/" : "") +
-            entity +
-            "?partialName=" + encodeURI(element);
-          await fetch(url, {headers: {'X-Octopus-ApiKey': this.apiKey}})
-            .then(response => response.json())
-            .then((data: any) => {
-              if (data && data.Items) {
-                callback(null, data.Items
-                  .filter((i: any) => i.Name == element)
-                  .map((i: any) => i.Id)
-                  .pop() || null);
-              } else {
-                callback(null, null);
-              }
-            })
-        }
-      ))
-        .filter(i => i)
-        .join(",");
+      : (
+          await mapLimit(input.split(','), 5, async (element: string, callback: AsyncResultCallback<string | null>) => {
+            const url = this.url + '/api/' + (space ? space + '/' : '') + entity + '?partialName=' + encodeURI(element);
+            await fetch(url, { headers: { 'X-Octopus-ApiKey': this.apiKey } })
+              .then(response => response.json())
+              .then((data: any) => {
+                if (data && data.Items) {
+                  callback(
+                    null,
+                    data.Items.filter((i: any) => i.Name == element)
+                      .map((i: any) => i.Id)
+                      .pop() || null
+                  );
+                } else {
+                  callback(null, null);
+                }
+              });
+          })
+        )
+          .filter(i => i)
+          .join(',');
   }
 
   /**
@@ -157,36 +168,33 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
   async convertProjectChildNamesToIds(input: string, projectId: string, entity: string, space?: string | null) {
     return !input
       ? null
-      : (await mapLimit(input.split(","), 5, async (element: string, callback: AsyncResultCallback<string | null>) => {
-          const url = this.url + "/api/" +
-            (space ? space + "/" : "") +
-            "projects/" + projectId + "/" +
-            entity;
-          await fetch(url, {headers: {'X-Octopus-ApiKey': this.apiKey}})
-            .then(response => response.json())
-            .then((data: any) => {
-              if (data && data.Items) {
-                callback(null, data.Items
-                  .filter((i: any) => i.Name == element)
-                  .map((i: any) => i.Id)
-                  .pop() || null);
-              } else {
-                callback(null, null);
-              }
-            })
-        }
-      ))
-        .filter(i => i)
-        .join(",");
+      : (
+          await mapLimit(input.split(','), 5, async (element: string, callback: AsyncResultCallback<string | null>) => {
+            const url = this.url + '/api/' + (space ? space + '/' : '') + 'projects/' + projectId + '/' + entity;
+            await fetch(url, { headers: { 'X-Octopus-ApiKey': this.apiKey } })
+              .then(response => response.json())
+              .then((data: any) => {
+                if (data && data.Items) {
+                  callback(
+                    null,
+                    data.Items.filter((i: any) => i.Name == element)
+                      .map((i: any) => i.Id)
+                      .pop() || null
+                  );
+                } else {
+                  callback(null, null);
+                }
+              });
+          })
+        )
+          .filter(i => i)
+          .join(',');
   }
 
   async getTaskDetails(taskId: string, space?: string | null) {
-    const url = this.url + "/api/" +
-      (space ? space + "/" : "") +
-      "tasks/" + taskId;
+    const url = this.url + '/api/' + (space ? space + '/' : '') + 'tasks/' + taskId;
 
-    return await fetch(url, {headers: {'X-Octopus-ApiKey': this.apiKey}})
-      .then(response => response.json());
+    return await fetch(url, { headers: { 'X-Octopus-ApiKey': this.apiKey } }).then(response => response.json());
   }
 
   processBucket(from: number, to: number, interval: number, items: any[], frame: MutableDataFrame) {
@@ -197,7 +205,7 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
     // https://github.com/grafana/grafana/issues/14130
     frame.add({
       time: from,
-      value: !_.isNil(results.value) ? results.value : results.count
+      value: !_.isNil(results.value) ? results.value : results.count,
     });
 
     const nextFrom = from + interval;
@@ -206,17 +214,26 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
     }
   }
 
-  getBucketItems(items: any[], count: number, value: number | null, bucketEnd: number): { count: number, value: number | null } {
+  getBucketItems(
+    items: any[],
+    count: number,
+    value: number | null,
+    bucketEnd: number
+  ): { count: number; value: number | null } {
     // If there is no date, or if the date is before the end of the bucket, add count the item
-    if (count < items.length && (_.isNil(items.slice(count)[0].ParsedEpoch) || items.slice(count)[0].ParsedEpoch < bucketEnd)) {
+    if (
+      count < items.length &&
+      (_.isNil(items.slice(count)[0].ParsedEpoch) || items.slice(count)[0].ParsedEpoch < bucketEnd)
+    ) {
       return this.getBucketItems(
         items,
         count + 1,
         this.getValue(value, items.slice(count)[0].calculatedValue),
-        bucketEnd);
+        bucketEnd
+      );
     }
 
-    return {count, value};
+    return { count, value };
   }
 
   /**
@@ -244,20 +261,16 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
   }
 
   async getItems(url: string, skip: number, from: number): Promise<any[]> {
-    const items = await fetch(
-      url + "&skip=" + skip + "&take=" + TAKE,
-      {headers: {'X-Octopus-ApiKey': this.apiKey}})
+    const items = await fetch(url + '&skip=' + skip + '&take=' + TAKE, { headers: { 'X-Octopus-ApiKey': this.apiKey } })
       .then(response => response.json())
       .then((data: any) => {
         // Start by filtering items outside of the range, and sorting in ascending order based on the created time.
-        return data.Items
-          .map((i: any) => {
-            i.ParsedEpoch = Date.parse(i.Created).valueOf();
-            return i;
-          })
-          .sort(this.itemComparer)
+        return data.Items.map((i: any) => {
+          i.ParsedEpoch = Date.parse(i.Created).valueOf();
+          return i;
+        }).sort(this.itemComparer);
       })
-      .catch((error) => {
+      .catch(error => {
         console.error('Error:', error);
       });
 
